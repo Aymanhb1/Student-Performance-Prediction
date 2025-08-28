@@ -262,19 +262,27 @@
               <!-- Row 1 -->
               <tr>
                 <td><label for="age">Age</label></td>
-                <td><input type="number" name="age" id="age" min="0" required /></td>
+                <td><input type="number" name="age" id="age" min="6" max="25" required /></td>
 
-                <td><label for="studytime">Study Time</label></td>
-                <td><input type="number" name="studytime" id="studytime" min="0" required /></td>
+                <td><label for="studytime">Study Time (1-4)</label></td>
+                <td>
+                  <select name="studytime" id="studytime" required>
+                    <option value="">-- Select --</option>
+                    <option value="1">&lt;2 hours</option>
+                    <option value="2">2-5 hours</option>
+                    <option value="3">5-10 hours</option>
+                    <option value="4">&gt;10 hours</option>
+                  </select>
+                </td>
               </tr>
 
               <!-- Row 2 -->
               <tr>
                 <td><label for="absences">Absences</label></td>
-                <td><input type="number" name="absences" id="absences" min="0" required /></td>
+                <td><input type="number" name="absences" id="absences" min="0" max="93" required /></td>
 
-                <td><label for="AverageGrade">Average Grade</label></td>
-                <td><input type="number" name="Average Grade" id="AverageGrade" step="0.01" required /></td>
+                <td><label for="AverageGrade">Average Grade (0-20)</label></td>
+                <td><input type="number" name="Average Grade" id="AverageGrade" step="0.01" min="0" max="20" required /></td>
               </tr>
 
               <!-- Row 3 -->
@@ -282,20 +290,59 @@
                 <td><label for="AttendanceRatio">Attendance Ratio (0–1)</label></td>
                 <td><input type="number" name="Attendance Ratio" id="AttendanceRatio" step="0.01" min="0" max="1" required /></td>
 
-                <td><label for="G1">G1</label></td>
-                <td><input type="number" name="G1" id="G1" min="0" required /></td>
+                <td><label for="G1">G1 (0-20)</label></td>
+                <td><input type="number" name="G1" id="G1" min="0" max="20" required /></td>
               </tr>
 
               <!-- Row 4 -->
               <tr>
-                <td><label for="G2">G2</label></td>
-                <td><input type="number" name="G2" id="G2" min="0" required /></td>
+                <td><label for="G2">G2 (0-20)</label></td>
+                <td><input type="number" name="G2" id="G2" min="0" max="20" required /></td>
 
-                <td><label for="G3">G3</label></td>
-                <td><input type="number" name="G3" id="G3" min="0" required /></td>
+                <td><label for="G3">G3 (0-20)</label></td>
+                <td><input type="number" name="G3" id="G3" min="0" max="20" required /></td>
               </tr>
 
-              <!-- Dropdown fields for better UX -->
+              <!-- Row 5: Most Important Features Only -->
+              <tr>
+                <td><label for="failures">Past Class Failures (0-4)</label></td>
+                <td><input type="number" name="failures" id="failures" min="0" max="4" value="0" required /></td>
+
+                <td><label for="Medu">Mother's Education (0-4)</label></td>
+                <td>
+                  <select name="Medu" id="Medu" required>
+                    <option value="">-- Select --</option>
+                    <option value="0">None</option>
+                    <option value="1">Primary (4th grade)</option>
+                    <option value="2">5th to 9th grade</option>
+                    <option value="3">Secondary</option>
+                    <option value="4">Higher Education</option>
+                  </select>
+                </td>
+              </tr>
+
+              <!-- Row 6: Support & Social -->
+              <tr>
+                <td><label for="schoolsup_yes">Extra School Support</label></td>
+                <td>
+                  <select name="schoolsup_yes" id="schoolsup_yes" required>
+                    <option value="">-- Select --</option>
+                    <option value="1">Yes</option>
+                    <option value="0">No</option>
+                  </select>
+                </td>
+
+                <td><label for="higher_yes">Wants Higher Education</label></td>
+                <td>
+                  <select name="higher_yes" id="higher_yes" required>
+                    <option value="">-- Select --</option>
+                    <option value="1">Yes</option>
+                    <option value="0">No</option>
+                  </select>
+                </td>
+              </tr>
+
+              <!-- Row 7: Internet & Family Support -->
               <tr>
                 <td><label for="internet_yes">Internet Access</label></td>
                 <td>
@@ -306,9 +353,9 @@
                   </select>
                 </td>
 
-                <td><label for="higher_yes">Parents Higher Education</label></td>
+                <td><label for="famsup_yes">Family Educational Support</label></td>
                 <td>
-                  <select name="higher_yes" id="higher_yes" required>
+                  <select name="famsup_yes" id="famsup_yes" required>
                     <option value="">-- Select --</option>
                     <option value="1">Yes</option>
                     <option value="0">No</option>
@@ -323,8 +370,6 @@
           <button type="submit">🚀 Predict Performance</button>
         </div>
       </form>
-
-      <div class="hint">💡 Tip: Add more features from your columns.txt file to improve prediction accuracy</div>
 
       {% if result %}
       <div class="result">
