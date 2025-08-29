@@ -1,384 +1,197 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Student Performance Prediction</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+from flask import Flask, render_template, request, jsonify
+import pandas as pd
+import joblib
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+import os
 
-  <style>
-    /* Animated colorful background */
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab, #667eea, #764ba2);
-      background-size: 400% 400%;
-      animation: gradientShift 15s ease infinite;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px 0;
-    }
+app = Flask(__name__)
 
-    @keyframes gradientShift {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
+# Global variables for model and scaler
+model = None
+scaler = None
+training_columns = None
 
-    /* Main container - perfectly centered */
-    .container {
-      width: 100%;
-      max-width: 1000px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
+def load_model_and_scaler():
+    """Load the trained model, scaler, and training columns"""
+    global model, scaler, training_columns
+    
+    # Load model
+    MODEL_PATH = 'best_student_performance_model.pkl'
+    if os.path.exists(MODEL_PATH):
+        model = joblib.load(MODEL_PATH)
+        print("✅ Model loaded successfully")
+    else:
+        print(f"❌ Model file not found at {MODEL_PATH}")
+        return False
+    
+    # Load scaler
+    SCALER_PATH = 'trained_scaler.pkl'
+    if os.path.exists(SCALER_PATH):
+        scaler = joblib.load(SCALER_PATH)
+        print("✅ Scaler loaded successfully")
+    else:
+        print(f"❌ Scaler file not found at {SCALER_PATH}")
+        return False
+    
+    # Load training columns
+    COLUMNS_FILE = 'columns.txt'
+    if os.path.exists(COLUMNS_FILE):
+        with open(COLUMNS_FILE, 'r') as f:
+            training_columns = [line.strip() for line in f if line.strip()]
+        print(f"✅ Training columns loaded: {len(training_columns)} features")
+    else:
+        print(f"❌ Columns file not found at {COLUMNS_FILE}")
+        return False
+    
+    return True
 
-    /* Card container */
-    .card {
-      width: 95%;
-      max-width: 950px;
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      box-shadow: 0 15px 35px rgba(0,0,0,0.2);
-      padding: 30px;
-      border: 1px solid rgba(255,255,255,0.3);
-    }
+@app.route('/')
+def index():
+    """Main page with the prediction form"""
+    return render_template('form.html')
 
-    h1 {
-      margin: 0 0 25px 0;
-      font-size: 2rem;
-      text-align: center;
-      color: #1f2937;
-      font-weight: 700;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
+@app.route('/predict', methods=['POST'])
+def predict():
+    """Handle prediction requests"""
+    try:
+        if model is None or scaler is None or training_columns is None:
+            return jsonify({
+                'error': 'Model, scaler, or training columns not loaded properly',
+                'success': False
+            })
+        
+        # Get form data
+        data = request.json if request.json else request.form.to_dict()
+        
+        # Initialize input data with zeros for all training columns
+        input_data = {col: 0.0 for col in training_columns}
+        
+        # Map form inputs to model features
+        feature_mapping = {
+            'age': 'age',
+            'studytime': 'studytime', 
+            'absences': 'absences',
+            'average_grade': 'Average Grade',
+            'attendance_ratio': 'Attendance Ratio',
+            'g1': 'G1',
+            'g2': 'G2', 
+            'g3': 'G3',
+            'failures': 'failures',
+            'medu': 'Medu',
+            'schoolsup': 'schoolsup_yes',
+            'higher': 'higher_yes',
+            'internet': 'internet_yes',
+            'famsup': 'famsup_yes'
+        }
+        
+        # Process numerical features
+        for form_key, model_feature in feature_mapping.items():
+            if form_key in data and model_feature in training_columns:
+                if form_key in ['schoolsup', 'higher', 'internet', 'famsup']:
+                    # Binary features
+                    input_data[model_feature] = 1.0 if data[form_key] == 'yes' else 0.0
+                else:
+                    # Numerical features
+                    input_data[model_feature] = float(data[form_key])
+        
+        # Create DataFrame with correct column order
+        input_df = pd.DataFrame([input_data])[training_columns]
+        
+        # Scale the input data
+        input_scaled = scaler.transform(input_df)
+        
+        # Make prediction
+        prediction = model.predict(input_scaled)[0]
+        
+        # Get prediction probabilities if available
+        confidence = None
+        probabilities = {}
+        if hasattr(model, 'predict_proba'):
+            proba = model.predict_proba(input_scaled)[0]
+            confidence = np.max(proba) * 100
+            
+            # Map probabilities to class names
+            if hasattr(model, 'classes_'):
+                for i, class_name in enumerate(model.classes_):
+                    probabilities[class_name] = float(proba[i])
+        
+        # Prepare response
+        result = {
+            'success': True,
+            'prediction': prediction,
+            'confidence': round(confidence, 1) if confidence else None,
+            'probabilities': probabilities,
+            'recommendation': get_recommendation(prediction)
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Prediction failed: {str(e)}',
+            'success': False
+        })
 
-    /* Center the table wrapper */
-    .table-wrap {
-      display: flex;
-      justify-content: center;
-      overflow-x: auto;
-      margin-bottom: 20px;
-    }
-
-    /* Beautiful centered table */
-    table {
-      border-collapse: separate;
-      border-spacing: 0;
-      width: 100%;
-      max-width: 850px;
-      background: #fff;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-      margin: 0 auto;
-    }
-
-    thead th {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-      text-align: center;
-      padding: 15px 14px;
-      font-weight: 600;
-      font-size: 1rem;
-      letter-spacing: 0.5px;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    }
-
-    tbody td {
-      padding: 12px 14px;
-      border-bottom: 1px solid #e5e7eb;
-      vertical-align: middle;
-      text-align: center;
-    }
-
-    tbody tr:nth-child(even) {
-      background-color: #f8fafc;
-    }
-
-    tbody tr:last-child td {
-      border-bottom: 0;
-    }
-
-    tbody tr:hover {
-      background-color: #e0f2fe;
-      transform: scale(1.01);
-      transition: all 0.2s ease;
-    }
-
-    label {
-      font-size: 0.9rem;
-      color: #374151;
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 600;
-      text-align: left;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 2px solid #d1d5db;
-      border-radius: 10px;
-      font-size: 0.95rem;
-      outline: none;
-      transition: all 0.3s ease;
-      box-sizing: border-box;
+def get_recommendation(prediction):
+    """Get recommendation based on prediction"""
+    recommendations = {
+        'High Risk': {
+            'message': 'Intervention Recommended',
+            'details': 'This student may benefit from additional support and monitoring.',
+            'color': 'danger'
+        },
+        'Very High Risk': {
+            'message': 'Immediate Intervention Required', 
+            'details': 'This student needs immediate additional support and close monitoring.',
+            'color': 'danger'
+        },
+        'Medium Risk': {
+            'message': 'Monitor Progress',
+            'details': 'Keep track of this student\'s performance and provide support as needed.',
+            'color': 'warning'
+        },
+        'Low Risk': {
+            'message': 'On Track',
+            'details': 'Student appears to be performing well academically.',
+            'color': 'success'
+        },
+        'Very Low Risk': {
+            'message': 'Excellent Performance',
+            'details': 'Student is performing exceptionally well.',
+            'color': 'success'
+        }
     }
     
-    input:focus, select:focus {
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102,126,234,0.2);
-      transform: translateY(-1px);
-    }
+    return recommendations.get(prediction, {
+        'message': 'Assessment Complete',
+        'details': 'Review student performance regularly.',
+        'color': 'info'
+    })
 
-    /* Centered actions */
-    .actions {
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-      margin: 25px 0;
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    status = {
+        'model_loaded': model is not None,
+        'scaler_loaded': scaler is not None,
+        'columns_loaded': training_columns is not None,
+        'features_count': len(training_columns) if training_columns else 0
     }
+    return jsonify(status)
 
-    button {
-      padding: 15px 30px;
-      border: 0;
-      border-radius: 15px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      font-weight: 700;
-      font-size: 1.1rem;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 10px 25px rgba(102,126,234,0.4);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
+if __name__ == '__main__':
+    print("🚀 Starting Flask Student Performance Prediction App...")
     
-    button:hover { 
-      transform: translateY(-3px);
-      box-shadow: 0 15px 35px rgba(102,126,234,0.6);
-    }
-    
-    button:active { 
-      transform: translateY(-1px); 
-    }
+    # Load model and dependencies
+    if load_model_and_scaler():
+        print("✅ All components loaded successfully!")
+        print("🌐 Starting server...")
+        app.run(debug=True, host='0.0.0.0', port=5000)
+    else:
+        print("❌ Failed to load required components. Please check:")
+        print("  - best_student_performance_model.pkl")
+        print("  - trained_scaler.pkl") 
+        print("  - columns.txt")
 
-    /* Result panel - clearly under the table and centered */
-    .result {
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      width: 100%;
-    }
-    
-    .result-card {
-      width: 100%;
-      max-width: 850px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 16px;
-      padding: 20px 25px;
-      box-shadow: 0 10px 30px rgba(102,126,234,0.4);
-      text-align: center;
-      font-size: 1.3rem;
-      font-weight: 700;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      animation: resultSlideIn 0.5s ease-out;
-      border: 2px solid rgba(255,255,255,0.3);
-    }
-
-    @keyframes resultSlideIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .hint {
-      text-align: center;
-      margin-top: 15px;
-      color: #4b5563;
-      font-size: 0.9rem;
-      font-style: italic;
-    }
-
-    /* Responsive design */
-    @media (max-width: 768px) {
-      .card {
-        padding: 20px;
-        width: 90%;
-      }
-      
-      h1 {
-        font-size: 1.6rem;
-      }
-      
-      table {
-        font-size: 0.9rem;
-      }
-      
-      thead th, tbody td {
-        padding: 10px 8px;
-      }
-      
-      button {
-        padding: 12px 20px;
-        font-size: 1rem;
-      }
-      
-      .result-card {
-        font-size: 1.1rem;
-        padding: 18px 20px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="card">
-      <h1>🎓 Student Performance Prediction</h1>
-
-      <form method="post" action="/predict">
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 25%;">Feature</th>
-                <th style="width: 25%;">Value</th>
-                <th style="width: 25%;">Feature</th>
-                <th style="width: 25%;">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Row 1 -->
-              <tr>
-                <td><label for="age">Age</label></td>
-                <td><input type="number" name="age" id="age" min="6" max="25" required /></td>
-
-                <td><label for="studytime">Study Time (1-4)</label></td>
-                <td>
-                  <select name="studytime" id="studytime" required>
-                    <option value="">-- Select --</option>
-                    <option value="1">&lt;2 hours</option>
-                    <option value="2">2-5 hours</option>
-                    <option value="3">5-10 hours</option>
-                    <option value="4">&gt;10 hours</option>
-                  </select>
-                </td>
-              </tr>
-
-              <!-- Row 2 -->
-              <tr>
-                <td><label for="absences">Absences</label></td>
-                <td><input type="number" name="absences" id="absences" min="0" max="93" required /></td>
-
-                <td><label for="AverageGrade">Average Grade (0-20)</label></td>
-                <td><input type="number" name="Average_Grade" id="AverageGrade" step="0.01" min="0" max="20" required /></td>
-              </tr>
-
-              <!-- Row 3 -->
-              <tr>
-                <td><label for="AttendanceRatio">Attendance Ratio (0–1)</label></td>
-                <td><input type="number" name="Attendance_Ratio" id="AttendanceRatio" step="0.01" min="0" max="1" required /></td>
-
-                <td><label for="G1">G1 (0-20)</label></td>
-                <td><input type="number" name="G1" id="G1" min="0" max="20" required /></td>
-              </tr>
-
-              <!-- Row 4 -->
-              <tr>
-                <td><label for="G2">G2 (0-20)</label></td>
-                <td><input type="number" name="G2" id="G2" min="0" max="20" required /></td>
-
-                <td><label for="G3">G3 (0-20)</label></td>
-                <td><input type="number" name="G3" id="G3" min="0" max="20" required /></td>
-              </tr>
-
-              <!-- Row 5: Most Important Features Only -->
-              <tr>
-                <td><label for="failures">Past Class Failures (0-4)</label></td>
-                <td><input type="number" name="failures" id="failures" min="0" max="4" value="0" required /></td>
-
-                <td><label for="Medu">Mother's Education (0-4)</label></td>
-                <td>
-                  <select name="Medu" id="Medu" required>
-                    <option value="">-- Select --</option>
-                    <option value="0">None</option>
-                    <option value="1">Primary (4th grade)</option>
-                    <option value="2">5th to 9th grade</option>
-                    <option value="3">Secondary</option>
-                    <option value="4">Higher Education</option>
-                  </select>
-                </td>
-              </tr>
-
-              <!-- Row 6: Support & Social -->
-              <tr>
-                <td><label for="schoolsup_yes">Extra School Support</label></td>
-                <td>
-                  <select name="schoolsup_yes" id="schoolsup_yes" required>
-                    <option value="">-- Select --</option>
-                    <option value="1">Yes</option>
-                    <option value="0">No</option>
-                  </select>
-                </td>
-
-                <td><label for="higher_yes">Wants Higher Education</label></td>
-                <td>
-                  <select name="higher_yes" id="higher_yes" required>
-                    <option value="">-- Select --</option>
-                    <option value="1">Yes</option>
-                    <option value="0">No</option>
-                  </select>
-                </td>
-              </tr>
-
-              <!-- Row 7: Internet & Family Support -->
-              <tr>
-                <td><label for="internet_yes">Internet Access</label></td>
-                <td>
-                  <select name="internet_yes" id="internet_yes" required>
-                    <option value="">-- Select --</option>
-                    <option value="1">Yes</option>
-                    <option value="0">No</option>
-                  </select>
-                </td>
-
-                <td><label for="famsup_yes">Family Educational Support</label></td>
-                <td>
-                  <select name="famsup_yes" id="famsup_yes" required>
-                    <option value="">-- Select --</option>
-                    <option value="1">Yes</option>
-                    <option value="0">No</option>
-                  </select>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="actions">
-          <button type="submit">🚀 Predict Performance</button>
-        </div>
-      </form>
-
-      {% if result %}
-      <div class="result">
-        <div class="result-card">
-          🎯 <strong>Predicted Risk Category:</strong> {{ result }}
-        </div>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-</body>
-</html>
+app = Flask(__name__, template_folder='.')
