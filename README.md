@@ -54,10 +54,4 @@ The evaluation metrics for each model are available in the notebook. The **Rando
 2.  The best performing model will be saved as `best_student_performance_model.pkl`.
 3.  The `app.py` file provides a basic example of how to load the saved model and use it for predictions within a web framework (Flask). You would need to install the required libraries (`pip install -r requirements.txt`) and potentially adapt the `app.py` for your specific deployment environment.
 
-## Future Work
 
-*   Explore more advanced feature engineering techniques.
-*   Experiment with different machine learning algorithms and deep learning architectures.
-*   Perform hyperparameter tuning to optimize model performance.
-*   Integrate the sentiment analysis results as a feature if real student feedback data is available.
-*   Build a more robust and scalable deployment solution.
